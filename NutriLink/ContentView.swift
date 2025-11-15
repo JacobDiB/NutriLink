@@ -3,14 +3,26 @@
 import SwiftUI
 import Combine
 
+// role type for login
+enum UserRole {
+    case user
+    case coach
+}
+
 // main app view
 struct ContentView: View {
     @StateObject private var auth = AuthState()
     var body: some View {
         Group {
             if auth.isLoggedIn {
-                MainTabView()
-                    .environmentObject(auth)
+                // show different main views based on role
+                if auth.role == .coach {
+                    CoachMainTabView()
+                        .environmentObject(auth)
+                } else {
+                    MainTabView()
+                        .environmentObject(auth)
+                }
             } else {
                 LoginView()
                     .environmentObject(auth)
@@ -25,14 +37,16 @@ final class AuthState: ObservableObject {
     @AppStorage("isLoggedIn") var isLoggedIn: Bool = false
     @AppStorage("userEmail") var userEmail: String = ""
     @Published var error: String?
+    @Published var role: UserRole = .user
 
     // singing in
-    func signIn(email: String, password: String) {
+    func signIn(email: String, password: String, asCoach: Bool) {
         guard !email.isEmpty, !password.isEmpty else {
             error = "Enter email and password"
             return
         }
         userEmail = email
+        role = asCoach ? .coach : .user
         isLoggedIn = true
         error = nil
     }
@@ -41,6 +55,7 @@ final class AuthState: ObservableObject {
     func signOut() {
         isLoggedIn = false
         userEmail = ""
+        role = .user
     }
 }
 
@@ -50,6 +65,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false
+    @State private var isCoach = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -76,11 +92,12 @@ struct LoginView: View {
                     }
                 }
                 .textFieldStyle(.roundedBorder)
+                Toggle("Sign in as Coach", isOn: $isCoach)
             }
 
             // sign in button
             Button {
-                auth.signIn(email: email, password: password)
+                auth.signIn(email: email, password: password, asCoach: isCoach)
             } label: {
                 Text("Sign In")
                     .frame(maxWidth: .infinity)
@@ -95,7 +112,7 @@ struct LoginView: View {
 
             // guest login
             Button("Continue as Guest") {
-                auth.signIn(email: "guest@local", password: "guest")
+                auth.signIn(email: "guest@local", password: "guest", asCoach: false)
             }
             .buttonStyle(.bordered)
 
@@ -105,7 +122,7 @@ struct LoginView: View {
     }
 }
 
-// main app view after login page
+// main app view for user
 struct MainTabView: View {
     var body: some View {
         TabView {
@@ -113,6 +130,18 @@ struct MainTabView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
             LogView()
                 .tabItem { Label("Log", systemImage: "plus.app") }
+            ProfileView()
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+        }
+    }
+}
+    
+// main app view after login page for coach
+struct CoachMainTabView: View {
+    var body: some View {
+        TabView {
+            CoachHomeView()
+                .tabItem { Label("Coach Home", systemImage: "person.2.fill") }
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
@@ -132,6 +161,23 @@ struct HomeView: View {
             }
             .padding()
             .navigationTitle("Home")
+        }
+    }
+}
+    
+// coach home screen
+struct CoachHomeView: View {
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text("Coach Dashboard")
+                    .font(.title2)
+                    .bold()
+                Text("Here coaches will see client info and messages.")
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .navigationTitle("Coach")
         }
     }
 }
@@ -194,5 +240,3 @@ struct ProfileView: View {
 }
 
 #Preview { ContentView() }
-
-
