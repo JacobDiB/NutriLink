@@ -2,6 +2,8 @@
 
 import SwiftUI
 import Combine
+import Charts
+
 
 // role type for login
 enum UserRole {
@@ -128,14 +130,17 @@ struct MainTabView: View {
         TabView {
             HomeView()
                 .tabItem { Label("Home", systemImage: "house.fill") }
+
             LogView()
                 .tabItem { Label("Log", systemImage: "plus.app") }
+
+
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
     }
 }
-    
+
 // main app view after login page for coach
 struct CoachMainTabView: View {
     var body: some View {
@@ -150,20 +155,71 @@ struct CoachMainTabView: View {
 
 // home screen
 struct HomeView: View {
+    @AppStorage("goalCalories") private var goalCalories: String = "2200"
+    
+    @State private var progressData: [DailyProgress] = [
+        .init(date: Calendar.current.date(byAdding: .day, value: -4, to: Date())!, calories: 1800),
+        .init(date: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, calories: 2000),
+        .init(date: Calendar.current.date(byAdding: .day, value: -2, to: Date())!, calories: 2200),
+        .init(date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, calories: 1950),
+        .init(date: Date(), calories: 2100)
+    ]
+    
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Text("Welcome to NutriLink")
-                    .font(.title2)
-                    .bold()
-                Text("Track meals and goals easily.")
-                    .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    
+                    // MARK: Header
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Welcome to NutriLink")
+                            .font(.title2.bold())
+                        Text("Track meals and goals easily.")
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    // MARK: Progress Section (DIRECTLY ON HOME)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Your Weekly Progress")
+                            .font(.headline)
+                        
+                        Chart(progressData) { item in
+                            LineMark(
+                                x: .value("Date", item.date),
+                                y: .value("Calories", item.calories)
+                            )
+                            .foregroundStyle(.blue)
+                            .interpolationMethod(.cardinal)
+                        }
+                        .frame(height: 200)
+                        .padding()
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                    
+                    // MARK: Goal Box
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Daily Calorie Goal")
+                            .font(.headline)
+                        
+                        Text(goalCalories)
+                            .font(.title3.bold())
+                            .padding(.vertical, 4)
+                            .padding(.horizontal)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    
+                    Spacer()
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Home")
         }
     }
 }
+
     
 // coach home screen
 struct CoachHomeView: View {
@@ -182,36 +238,7 @@ struct CoachHomeView: View {
     }
 }
 
-// logging food screen
-struct LogView: View {
-    @State private var mealName = ""
-    @State private var calories = ""
-    @State private var meals: [String] = []
 
-    var body: some View {
-        NavigationStack {
-            VStack {
-                HStack {
-                    TextField("Meal", text: $mealName)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("kcal", text: $calories)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 80)
-                    Button("Add") {
-                        guard !mealName.isEmpty, !calories.isEmpty else { return }
-                        meals.append("\(mealName) • \(calories) kcal")
-                        mealName = ""
-                        calories = ""
-                    }
-                }
-                .padding(.horizontal)
-
-                List(meals, id: \.self) { Text($0) }
-            }
-            .navigationTitle("Log")
-        }
-    }
-}
 
 // profile tab
 struct ProfileView: View {
