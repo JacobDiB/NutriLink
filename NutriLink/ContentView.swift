@@ -130,16 +130,14 @@ struct MainTabView: View {
         TabView {
             HomeView()
                 .tabItem { Label("Home", systemImage: "house.fill") }
-
             LogView()
                 .tabItem { Label("Log", systemImage: "plus.app") }
-
-
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
     }
 }
+
 
 // main app view after login page for coach
 struct CoachMainTabView: View {
