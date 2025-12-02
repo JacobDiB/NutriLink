@@ -8,16 +8,20 @@
 import SwiftUI
 import SwiftData
 
+// App entry point
 @main
 struct NutriLinkApp: App {
     var body: some Scene {
         WindowGroup {
+            // Root view and persistent data model setup for SwiftData
             ContentView()
                 .modelContainer(for: [
                     UserAccount.self,
                     CoachAccount.self,
-                    DailyLog.self
+                    DailyLog.self,
+                    FoodEntry.self
                 ])
         }
     }
 }
+
