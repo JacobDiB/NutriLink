@@ -176,8 +176,13 @@ struct MainTabView: View {
         TabView {
             HomeView()
                 .tabItem { Label("Home", systemImage: "house.fill") }
+
             LogView()
                 .tabItem { Label("Log", systemImage: "plus.app") }
+
+            HistoryView()
+                .tabItem { Label("History", systemImage: "clock") }
+
             ProfileDetailView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
