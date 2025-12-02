@@ -10,81 +10,110 @@ import SwiftUI
 import Charts
 
 struct ProfileDetailView: View {
-    @State private var progressData: [DailyProgress] = [
-        .init(date: Calendar.current.date(byAdding: .day, value: -4, to: Date())!, calories: 1800),
-        .init(date: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, calories: 2000),
-        .init(date: Calendar.current.date(byAdding: .day, value: -2, to: Date())!, calories: 2200),
-        .init(date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, calories: 1950),
-        .init(date: Date(), calories: 2100)
-    ]
+    @EnvironmentObject var auth: AuthState
 
-    @AppStorage("goalCalories") private var goalCalories: String = "2200"
+    private var yearlyLogs: [DailyLog] {
+        guard let logs = auth.currentUser?.dailyLogs else { return [] }
+        let yearAgo = Calendar.current.date(byAdding: .year, value: -1, to: Date())!
+        return logs
+            .filter { $0.date >= yearAgo }
+            .sorted { $0.date < $1.date }
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
 
-                // MARK: Progress Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Progress")
-                        .font(.title2.bold())
-
-                    Chart(progressData) { item in
-                        LineMark(
-                            x: .value("Date", item.date),
-                            y: .value("Calories", item.calories)
-                        )
-                        .foregroundStyle(.blue)
-                        .interpolationMethod(.cardinal)
-                    }
-                    .frame(height: 200)
-                    .padding()
-                    .background(.thinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-
-                // MARK: Goals Section
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Goals")
-                        .font(.title2.bold())
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Daily Calorie Goal")
-                            .font(.subheadline)
+                    // MARK: Header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(auth.currentUser?.username ?? "")
+                            .font(.title3)
                             .foregroundStyle(.secondary)
 
-                        TextField("Goal", text: $goalCalories)
-                            .disabled(true)
+                        Text(auth.currentUser?.email ?? "")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding()
-                    .background(.thinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
 
-                // MARK: Trainer Section
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Trainer")
-                        .font(.title2.bold())
+                    // MARK: Yearly Progress
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Progress (Past Month)")
+                            .font(.title2.bold())
 
-                    Text("Assigned Trainer: Sarah Johnson")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                        if yearlyLogs.isEmpty {
+                            Text("No logs recorded yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(yearlyLogs.count)")
+                            Chart(yearlyLogs) { item in
+                                LineMark(
+                                    x: .value("Date", item.date),
+                                    y: .value("Calories", item.calories)
+                                )
+                                .foregroundStyle(.blue)
+                                .interpolationMethod(.cardinal)
+                            }
+                            .frame(height: 200)
+                            .padding()
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                    }
+
+                    // MARK: Goals Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Goals")
+                            .font(.title2.bold())
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Daily Calorie Goal")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            Text(auth.currentUser?.goalCalories ?? "Not set")
+                                .font(.title3.bold())
+                        }
                         .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.thinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                }
-            }
-            .padding()
-        }
-        .navigationTitle("Profile")
-    }
-}
+                    }
 
-struct DailyProgress: Identifiable {
-    let id = UUID()
-    let date: Date
-    let calories: Int
+                    // MARK: Trainer Section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Trainer")
+                            .font(.title2.bold())
+
+                        Text(auth.currentUser?.coach?.name ?? "No assigned trainer")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                    // MARK: Settings / Sign Out
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Account Actions")
+                            .font(.title2.bold())
+
+                        Button(role: .destructive) {
+                            auth.signOut()
+                        } label: {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+
+                    Spacer()
+                }
+                .padding()
+            }
+        }
+    }
 }
 
 #Preview {
@@ -92,3 +121,4 @@ struct DailyProgress: Identifiable {
         ProfileDetailView()
     }
 }
+

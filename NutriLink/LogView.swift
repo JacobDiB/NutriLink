@@ -54,7 +54,8 @@ struct LogView: View {
                         Text(food.name)
                             .font(.headline)
 
-                        if let brand = food.brand, !brand.isEmpty {
+                        if let brand = food.brand,
+                            !brand.isEmpty {
                             Text(brand)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -85,6 +86,7 @@ struct LogView: View {
         do {
             let foods = try await FatSecretAPI.shared.searchFoods(query: trimmed)
             results = foods
+            print("foods: " + "\(foods[0])")
         } catch {
             errorMessage = error.localizedDescription
             results = []

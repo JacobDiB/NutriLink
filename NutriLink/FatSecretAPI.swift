@@ -20,12 +20,52 @@ struct FatSecretFoodSearchResponse: Decodable {
             let name: String
             let description: String?
             let brand: String?
+            let servings: Servings?     // ← NEW
 
             enum CodingKeys: String, CodingKey {
                 case id = "food_id"
                 case name = "food_name"
                 case description = "food_description"
                 case brand = "brand_name"
+                case servings
+            }
+
+            struct Servings: Decodable {
+                let serving: [Serving]
+            }
+
+            struct Serving: Decodable {
+                let calories: String?
+                let fat: String?
+                let carbohydrate: String?
+                let protein: String?
+                let sugar: String?
+                let fiber: String?
+                let sodium: String?
+                let potassium: String?
+                let calcium: String?
+                let iron: String?
+
+                let servingDescription: String?
+                let metricServingAmount: String?
+                let metricServingUnit: String?
+
+                enum CodingKeys: String, CodingKey {
+                    case calories
+                    case fat
+                    case carbohydrate
+                    case protein
+                    case sugar
+                    case fiber
+                    case sodium
+                    case potassium
+                    case calcium
+                    case iron
+
+                    case servingDescription = "serving_description"
+                    case metricServingAmount = "metric_serving_amount"
+                    case metricServingUnit = "metric_serving_unit"
+                }
             }
         }
 
@@ -74,7 +114,7 @@ final class FatSecretAPI {
         ]
 
         let url = components.url!
-        print("👉 [FatSecret] Searching foods with URL: \(url.absoluteString)")
+//        print("👉 [FatSecret] Searching foods with URL: \(url.absoluteString)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -83,9 +123,9 @@ final class FatSecretAPI {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
 
-            if let http = response as? HTTPURLResponse {
-                print("👉 [FatSecret] searchFoods status code: \(http.statusCode)")
-            }
+//            if let http = response as? HTTPURLResponse {
+//                print("👉 [FatSecret] searchFoods status code: \(http.statusCode)")
+//            }
 
             // DEBUG: print raw body
             if let bodyString = String(data: data, encoding: .utf8) {
@@ -122,7 +162,7 @@ final class FatSecretAPI {
 
     private func fetchAccessToken() async throws {
         let url = URL(string: "https://oauth.fatsecret.com/connect/token")!
-        print("👉 [FatSecret] Fetching token from: \(url.absoluteString)")
+//        print("👉 [FatSecret] Fetching token from: \(url.absoluteString)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -146,13 +186,13 @@ final class FatSecretAPI {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
 
-            if let http = response as? HTTPURLResponse {
-                print("👉 [FatSecret] fetchAccessToken status code: \(http.statusCode)")
-            }
-
-            if let bodyString = String(data: data, encoding: .utf8) {
-                print("👉 [FatSecret] fetchAccessToken raw response:\n\(bodyString)")
-            }
+//            if let http = response as? HTTPURLResponse {
+//                print("👉 [FatSecret] fetchAccessToken status code: \(http.statusCode)")
+//            }
+//
+//            if let bodyString = String(data: data, encoding: .utf8) {
+//                print("👉 [FatSecret] fetchAccessToken raw response:\n\(bodyString)")
+//            }
 
             if let http = response as? HTTPURLResponse, http.statusCode != 200 {
                 throw NSError(

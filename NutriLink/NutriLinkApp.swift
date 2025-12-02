@@ -6,12 +6,18 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct NutriLinkApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .modelContainer(for: [
+                    UserAccount.self,
+                    CoachAccount.self,
+                    DailyLog.self
+                ])
         }
     }
 }

@@ -1,6 +1,7 @@
 // iphone 17 pro
 
 import SwiftUI
+import SwiftData
 import Combine
 import Charts
 
@@ -13,15 +14,16 @@ enum UserRole {
 
 // main app view
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var auth = AuthState()
+
     var body: some View {
         Group {
             if auth.isLoggedIn {
-                // show different main views based on role
-                if auth.role == .coach {
+                if auth.currentCoach != nil {
                     CoachMainTabView()
                         .environmentObject(auth)
-                } else {
+                } else if auth.currentUser != nil {
                     MainTabView()
                         .environmentObject(auth)
                 }
@@ -30,58 +32,105 @@ struct ContentView: View {
                     .environmentObject(auth)
             }
         }
+        .task {
+            await SampleData.preloadIfNeeded(modelContext: modelContext)
+        }
     }
 }
 
 // stores login info
 @MainActor
 final class AuthState: ObservableObject {
-    @AppStorage("isLoggedIn") var isLoggedIn: Bool = false
-    @AppStorage("userEmail") var userEmail: String = ""
+    @Published var isLoggedIn: Bool = false
+    @Published var currentUser: UserAccount?
+    @Published var currentCoach: CoachAccount?
     @Published var error: String?
-    @Published var role: UserRole = .user
 
-    // singing in
-    func signIn(email: String, password: String, asCoach: Bool) {
-        guard !email.isEmpty, !password.isEmpty else {
-            error = "Enter email and password"
-            return
-        }
-        userEmail = email
-        role = asCoach ? .coach : .user
-        isLoggedIn = true
+    // Signs in using SwiftData lookup
+    func signIn(email: String, password: String, modelContext: ModelContext) async {
         error = nil
+
+        let loginEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let loginPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            // Debug: list all accounts visible to this context
+            let allUsers = try modelContext.fetch(FetchDescriptor<UserAccount>())
+            let allCoaches = try modelContext.fetch(FetchDescriptor<CoachAccount>())
+            
+            // Try user login
+            let userDescriptor = FetchDescriptor<UserAccount>(
+                predicate: #Predicate { user in
+                    user.email == loginEmail &&
+                    user.password == loginPassword
+                }
+            )
+
+            if let user = try modelContext.fetch(userDescriptor).first {
+                self.currentUser = user
+                self.currentCoach = nil
+                self.isLoggedIn = true
+                print("DEBUG AuthState – logged in as USER \(user.email)")
+                return
+            }
+
+            // Try coach login
+            let coachDescriptor = FetchDescriptor<CoachAccount>(
+                predicate: #Predicate { coach in
+                    coach.email == loginEmail &&
+                    coach.password == loginPassword
+                }
+            )
+
+            if let coach = try modelContext.fetch(coachDescriptor).first {
+                self.currentCoach = coach
+                self.currentUser = nil
+                self.isLoggedIn = true
+                print("DEBUG AuthState – logged in as COACH \(coach.email)")
+                return
+            }
+
+            // No match → error
+            self.error = "Invalid email or password"
+            self.isLoggedIn = false
+            print("DEBUG AuthState – no match for \(loginEmail)")
+
+        } catch {
+            self.error = "Login failed: \(error.localizedDescription)"
+            self.isLoggedIn = false
+            print("DEBUG AuthState – signIn error: \(error)")
+        }
     }
 
-    // singing out
+
+    // Signs out and clears state
     func signOut() {
-        isLoggedIn = false
-        userEmail = ""
-        role = .user
+        self.currentUser = nil
+        self.currentCoach = nil
+        self.isLoggedIn = false
+        self.error = nil
     }
 }
 
 // login screen
 struct LoginView: View {
     @EnvironmentObject var auth: AuthState
+    @Environment(\.modelContext) private var modelContext
+
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false
-    @State private var isCoach = false
 
     var body: some View {
         VStack(spacing: 20) {
             Text("NutriLink")
-                .font(.largeTitle)
-                .bold()
+                .font(.largeTitle.bold())
 
-            // email and password fields
             VStack(spacing: 12) {
                 TextField("Email", text: $email)
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
-                    // toggles between showing and hiding password
                     Group {
                         if showPassword {
                             TextField("Password", text: $password)
@@ -89,17 +138,20 @@ struct LoginView: View {
                             SecureField("Password", text: $password)
                         }
                     }
+
                     Button(action: { showPassword.toggle() }) {
                         Image(systemName: showPassword ? "eye.slash" : "eye")
                     }
                 }
                 .textFieldStyle(.roundedBorder)
-                Toggle("Sign in as Coach", isOn: $isCoach)
             }
 
-            // sign in button
             Button {
-                auth.signIn(email: email, password: password, asCoach: isCoach)
+                Task {
+                    await auth.signIn(email: email,
+                                      password: password,
+                                      modelContext: modelContext)
+                }
             } label: {
                 Text("Sign In")
                     .frame(maxWidth: .infinity)
@@ -107,21 +159,15 @@ struct LoginView: View {
             .buttonStyle(.borderedProminent)
             .disabled(email.isEmpty || password.isEmpty)
 
-            // invalid login text
             if let e = auth.error {
-                Text(e).foregroundStyle(.red)
+                Text(e).foregroundColor(.red)
             }
-
-            // guest login
-            Button("Continue as Guest") {
-                auth.signIn(email: "guest@local", password: "guest", asCoach: false)
-            }
-            .buttonStyle(.bordered)
 
             Spacer()
         }
         .padding()
     }
+    
 }
 
 // main app view for user
@@ -132,7 +178,7 @@ struct MainTabView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
             LogView()
                 .tabItem { Label("Log", systemImage: "plus.app") }
-            ProfileView()
+            ProfileDetailView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
     }
@@ -145,7 +191,7 @@ struct CoachMainTabView: View {
         TabView {
             CoachHomeView()
                 .tabItem { Label("Coach Home", systemImage: "person.2.fill") }
-            ProfileView()
+            CoachProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
     }
@@ -153,54 +199,61 @@ struct CoachMainTabView: View {
 
 // home screen
 struct HomeView: View {
+    @EnvironmentObject var auth: AuthState
     @AppStorage("goalCalories") private var goalCalories: String = "2200"
-    
-    @State private var progressData: [DailyProgress] = [
-        .init(date: Calendar.current.date(byAdding: .day, value: -4, to: Date())!, calories: 1800),
-        .init(date: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, calories: 2000),
-        .init(date: Calendar.current.date(byAdding: .day, value: -2, to: Date())!, calories: 2200),
-        .init(date: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, calories: 1950),
-        .init(date: Date(), calories: 2100)
-    ]
-    
+
+    // We compute the user's last 7 days of logs
+    private var recentLogs: [DailyLog] {
+        guard let logs = auth.currentUser?.dailyLogs else { return [] }
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -6, to: Date())!
+        return logs
+            .filter { $0.date >= weekAgo }
+            .sorted { $0.date < $1.date }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    
+
                     // MARK: Header
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Welcome to NutriLink")
+                        Text("Welcome to NutriLink, \(auth.currentUser?.username ?? "User")")
                             .font(.title2.bold())
                         Text("Track meals and goals easily.")
                             .foregroundStyle(.secondary)
                     }
-                    
-                    // MARK: Progress Section (DIRECTLY ON HOME)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Your Weekly Progress")
-                            .font(.headline)
-                        
-                        Chart(progressData) { item in
-                            LineMark(
-                                x: .value("Date", item.date),
-                                y: .value("Calories", item.calories)
-                            )
-                            .foregroundStyle(.blue)
-                            .interpolationMethod(.cardinal)
+
+                    // MARK: Weekly Progress
+                    if !recentLogs.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Your Weekly Progress")
+                                .font(.headline)
+
+                            Chart(recentLogs) { item in
+                                LineMark(
+                                    x: .value("Date", item.date),
+                                    y: .value("Calories", item.calories)
+                                )
+                                .foregroundStyle(.blue)
+                                .interpolationMethod(.cardinal)
+                            }
+                            .frame(height: 200)
+                            .padding()
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
-                        .frame(height: 200)
-                        .padding()
-                        .background(.thinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    } else {
+                        Text("No logs recorded for this week.")
+                            .foregroundStyle(.secondary)
                     }
-                    
-                    // MARK: Goal Box
+
+                    // MARK: Goal
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Daily Calorie Goal")
                             .font(.headline)
-                        
-                        Text(goalCalories)
+
+                        Text(auth.currentUser?.goalCalories ?? "Not set")
                             .font(.title3.bold())
                             .padding(.vertical, 4)
                             .padding(.horizontal)
@@ -208,7 +261,7 @@ struct HomeView: View {
                             .background(.thinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                    
+
                     Spacer()
                 }
                 .padding()
@@ -217,51 +270,147 @@ struct HomeView: View {
         }
     }
 }
-
     
 // coach home screen
 struct CoachHomeView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text("Coach Dashboard")
-                    .font(.title2)
-                    .bold()
-                Text("Here coaches will see client info and messages.")
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-            .navigationTitle("Coach")
-        }
-    }
-}
-
-
-
-// profile tab
-struct ProfileView: View {
     @EnvironmentObject var auth: AuthState
-    @AppStorage("userEmail") private var email: String = ""
-    @AppStorage("goalCalories") private var goalCalories: String = "2200"
+
+    private var coach: CoachAccount? {
+        auth.currentCoach
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Account") {
-                    Text(email.isEmpty ? "Guest" : email)
-                    Button("Sign Out") {
-                        auth.signOut()
-                    }
-                    .foregroundStyle(.red)
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
 
-                Section("Daily Goal") {
-                    TextField("Calories", text: $goalCalories)
+                    // MARK: Welcome Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Welcome back, \(coach?.name ?? "Coach")")
+                            .font(.title.bold())
+                        Text("Here is an overview of your clients.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top)
+
+                    // MARK: Client List
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Your Clients")
+                            .font(.title2.bold())
+
+                        if let clients = coach?.clients, !clients.isEmpty {
+                            ForEach(clients, id: \.email) { client in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(client.username)
+                                        .font(.headline)
+                                    Text(client.email)
+                                        .foregroundStyle(.secondary)
+                                        .font(.subheadline)
+
+                                    // Optional: recent average calories
+                                    if let avg = averageCalories(for: client) {
+                                        Text("Avg. calories (7 days): \(avg)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.thinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        } else {
+                            Text("No clients assigned yet.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
                 }
+                .padding()
             }
-            .navigationTitle("Profile")
+            .navigationTitle("Coach Dashboard")
+        }
+    }
+
+    // MARK: Helper — calculate weekly average
+    func averageCalories(for user: UserAccount) -> Int? {
+        let logs = user.dailyLogs.sorted { $0.date > $1.date }
+        let last7 = logs.prefix(7)
+        guard !last7.isEmpty else { return nil }
+        let avg = last7.map { $0.calories }.reduce(0, +) / last7.count
+        return avg
+    }
+}
+
+
+// coach profile tab
+struct CoachProfileView: View {
+    @EnvironmentObject var auth: AuthState
+
+    private var coach: CoachAccount? {
+        auth.currentCoach
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+
+                    // MARK: Header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Profile")
+                            .font(.largeTitle.bold())
+                        Text(coach?.name ?? "Coach")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text(coach?.email ?? "")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // MARK: Bio Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Bio")
+                            .font(.title2.bold())
+
+                        Text(coach?.bio.isEmpty == true ? "No bio available." : coach?.bio ?? "")
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+
+                    // MARK: Settings / Sign Out
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Account Actions")
+                            .font(.title2.bold())
+
+                        Button(role: .destructive) {
+                            auth.signOut()
+                        } label: {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationTitle("Coach Profile")
         }
     }
 }
 
-#Preview { ContentView() }
+#Preview {
+    ContentView()
+            .modelContainer(for: [
+                UserAccount.self,
+                CoachAccount.self,
+                DailyLog.self
+            ], inMemory: true)
+}
