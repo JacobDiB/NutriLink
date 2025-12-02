@@ -8,42 +8,36 @@
 import Foundation
 import SwiftData
 
+// Helper for preloading demo users, coaches, and logs into SwiftData
 struct SampleData {
     
+    // Remove all existing users, coaches, and logs
     static func clearAllData(modelContext: ModelContext) throws {
-        // Delete all users
         let allUsers = try modelContext.fetch(FetchDescriptor<UserAccount>())
         allUsers.forEach { modelContext.delete($0) }
 
-        // Delete all coaches
         let allCoaches = try modelContext.fetch(FetchDescriptor<CoachAccount>())
         allCoaches.forEach { modelContext.delete($0) }
 
-        // Delete all daily logs
         let allLogs = try modelContext.fetch(FetchDescriptor<DailyLog>())
         allLogs.forEach { modelContext.delete($0) }
 
         try modelContext.save()
     }
 
+    // Only preload data if the store is empty
     static func preloadIfNeeded(modelContext: ModelContext) async {
         do {
-            // Check if we already have any coaches OR users
-//            let existingCoaches = try modelContext.fetch(FetchDescriptor<CoachAccount>())
-//            let existingUsers   = try modelContext.fetch(FetchDescriptor<UserAccount>())
-//
-//            print("DEBUG SampleData – existing coaches: \(existingCoaches.count), users: \(existingUsers.count)")
-//
-//            if !existingCoaches.isEmpty || !existingUsers.isEmpty {
-//                print("DEBUG SampleData – skipping preload, data already exists.")
-//                return
-//            }
-            
+            let existingUsers = try modelContext.fetch(FetchDescriptor<UserAccount>())
+            let existingCoaches = try modelContext.fetch(FetchDescriptor<CoachAccount>())
+
+            if !existingUsers.isEmpty || !existingCoaches.isEmpty {
+                return
+            }
+
             try clearAllData(modelContext: modelContext)
 
-                    print("DEBUG SampleData – cleared old data.")
-
-            // Helper: generate last 30 days of logs
+            // Generate 30 days of random logs for a sample user
             func generateMonthOfLogs() -> [DailyLog] {
                 let cal = Calendar.current
                 return (0..<30).map { offset in
@@ -53,7 +47,6 @@ struct SampleData {
                 }
             }
 
-            // Coaches
             let coachSarah = CoachAccount(
                 email: "sarah.coach@nutrilink.com",
                 password: "password123",
@@ -66,7 +59,6 @@ struct SampleData {
                 name: "Mike Thompson"
             )
 
-            // Users for Sarah
             let emily = UserAccount(
                 email: "emily@example.com",
                 password: "emily123",
@@ -85,10 +77,6 @@ struct SampleData {
                 coach: coachSarah
             )
 
-            coachSarah.clients = [emily, jason]
-            coachSarah.bio = "Certified nutritionist and personal trainer with 6 years of experience."
-
-            // Users for Mike
             let anna = UserAccount(
                 email: "anna@example.com",
                 password: "anna789",
@@ -107,29 +95,24 @@ struct SampleData {
                 coach: coachMike
             )
 
+            coachSarah.clients = [emily, jason]
+            coachSarah.bio = "Certified nutritionist and personal trainer with 6 years of experience."
+
             coachMike.clients = [anna, tom]
             coachMike.bio = "Strength coach specializing in muscle building and athletic performance."
 
-
-            // Insert everything
             modelContext.insert(coachSarah)
-//            modelContext.insert(coachMike)
+            modelContext.insert(coachMike)
             modelContext.insert(emily)
             modelContext.insert(jason)
-//            modelContext.insert(anna)
-//            modelContext.insert(tom)
+            modelContext.insert(anna)
+            modelContext.insert(tom)
 
             try modelContext.save()
 
-            // Debug: confirm we can read them right after save
-            let usersAfter = try modelContext.fetch(FetchDescriptor<UserAccount>())
-            let coachesAfter = try modelContext.fetch(FetchDescriptor<CoachAccount>())
-
-            print("DEBUG SampleData – after save, coaches: \(coachesAfter.count), users: \(usersAfter.count)")
-            print("DEBUG SampleData – user logs: \(usersAfter.map { $0.username + ": " + "\($0.dailyLogs.count )"})")
-
         } catch {
-            print("DEBUG SampleData – failed to preload: \(error)")
+            // Ignore preload errors in production sample data
         }
     }
 }
+
